@@ -8,6 +8,9 @@ Usage:
 
 
 Settings:
+
 ThreadLink: Link to 4chan thread you wish to scrape. Ex: https://boards.4chan.org/gif/thread/23347974
+
 MonitorMode: Accepts "Y" or "N" as input 
+
 FolderName: Name of the folder you wish to save your scraped images in
