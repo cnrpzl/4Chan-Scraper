@@ -3,20 +3,29 @@ import shutil
 import requests
 from bs4 import BeautifulSoup
 import os.path, os
+from os import system
 import time
 import configparser 
+import json
+from datetime import datetime
 
 
 s = requests.session()
+now = datetime.now()
+starting_time = now.strftime("%H:%M:%S")
 
 def setupConfig():
-    threadLink = input('Please input thread link: ')
-    folderName = input('Please input folder name: ')
+    finished = "N"
+    threadDict = {}
+    while finished.upper() == "N":
+        threadLink = input('Please input thread link: ')
+        folderName = input('Please input folder name: ')
+        threadDict[threadLink] = folderName
+        finished = input('Finished inputting links to monitor? (Y/N):  ')
     monitorMode = input('Monitor thread? (Y/N): ')
     config = configparser.ConfigParser()
-    config['SETTINGS'] = {'ThreadLink': threadLink,
-    "MonitorMode": monitorMode,
-    "FolderName": folderName}
+    config['SETTINGS'] = {'threadCollection': threadDict,
+    "MonitorMode": monitorMode}
     with open('settings.ini', 'w') as configfile:
         config.write(configfile)
     return True
@@ -33,32 +42,18 @@ def loadConfig():
             setupConfig()
         else:
             print("Using last known settings...")
-
     config = configparser.ConfigParser()
     config.sections()
     config.read('settings.ini')
-    threadNumber = config['SETTINGS']["ThreadLink"]
     monitorMode = config['SETTINGS']['MonitorMode']
-    folderName = config['SETTINGS']['FolderName']
-    while threadNumber == '' or monitorMode == '' or folderName == '':
-        print("Invalid config, starting setup...")
-        setupConfig()
-        config.read('settings.ini')
-        threadNumber = config['SETTINGS']["ThreadLink"]
-        monitorMode = config['SETTINGS']['MonitorMode']
-        folderName = config['SETTINGS']['FolderName']
-    checkFolderPath(folderName)
-
-    return threadNumber, monitorMode, folderName
+    linkDict = json.loads(config['SETTINGS']["threadCollection"].replace("'", '"'))
+    return linkDict, monitorMode
 
 def checkFolderPath(folderName):
     imageFolderPath = f'./{folderName}/'
-
     if os.path.isdir(imageFolderPath) != True:
         print(f'Creating new directory at {imageFolderPath}')
         os.mkdir(imageFolderPath)
-    else:
-        print('Storing images in previously created folder')
 
 def getImageLinksFromThread(threadLink):
     try:
@@ -70,11 +65,9 @@ def getImageLinksFromThread(threadLink):
     imageLinks = []
     soup = BeautifulSoup(thread, "html.parser")
     imageElements = soup.find_all('a', class_="fileThumb")
-
     for link in imageElements:
         if link.has_attr('href'):
             imageLinks.append("https:" + link['href'])
-
     return imageLinks
 
 def downloadImage(folder, imageLink):
@@ -84,27 +77,44 @@ def downloadImage(folder, imageLink):
         with open(f'./{folder}/{fileName}', 'wb') as out_file:
             shutil.copyfileobj(response.raw, out_file)
         del response
-        print(f"{fileName} succesfully downloaded.")
+        return 1
     else:
-        print(f'{fileName} already exists, skipping.')
-
+        return 0
+    
 def checkDuplicate(folderName, fileName):
     if os.path.isfile(f'./{folderName}/{fileName}') == True:
         return True
     else:
         return False
 
-thread, monitor, folder = loadConfig()
+thread, monitor = loadConfig()
 if monitor.upper() == "Y":
-    print("Monitor mode started. Refreshing every 180 seconds.")
+    totalImages = 0
     while True:
-        imageLinks = getImageLinksFromThread(thread)
-        for image in imageLinks:
-            downloadImage(folder, image)
-        print("Sleeping for 180 seconds.")
-        time.sleep(180)
+        system('cls')
+        print("Monitor mode started. Refreshing every 300 seconds.")
+        for key, value in thread.items():
+            print(f"Downloading images from {key}...")
+            downloadedFiles = 0
+            checkFolderPath(value)
+            imageLinks = getImageLinksFromThread(key)
+            for image in imageLinks:
+                downloadedFiles += downloadImage(value, image)
+            print(f"{downloadedFiles} new files succesfully downloaded to folder {value}")
+            totalImages += downloadedFiles
+        print(f"{totalImages} new image(s) downloaded as of {starting_time}")
+        print("Sleeping for 300 seconds.")
+        time.sleep(300)
 else:
     print("Regular mode started.")
-    imageLinks = getImageLinksFromThread(thread)
-    for image in imageLinks:
-        downloadImage(folder, image)
+    totalImages = 0
+    for key, value in thread.items():
+            print(f"Downloading images from {key}...")
+            downloadedFiles = 0
+            checkFolderPath(value)
+            imageLinks = getImageLinksFromThread(key)
+            for image in imageLinks:
+                downloadedFiles += downloadImage(value, image)
+            print(f"{downloadedFiles} new files succesfully downloaded to folder {value}")
+            totalImages += downloadedFiles
+    print(f"{totalImages} new images downloaded.")
